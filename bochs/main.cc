@@ -1,5 +1,5 @@
 /////////////////////////////////////////////////////////////////////////
-// $Id$
+// $Id: main.cc 14204 2021-03-27 17:23:31Z vruppert $
 /////////////////////////////////////////////////////////////////////////
 //
 //  Copyright (C) 2001-2021  The Bochs Project
@@ -566,6 +566,9 @@ void print_usage(void)
     "  -r path          restore the Bochs state from path\n"
     "  -log filename    specify Bochs log file name\n"
     "  -unlock          unlock Bochs images leftover from previous session\n"
+    "  -kernel vmlinux  run 64-bit vmlinux kernel directly\n"
+    "  -append cmdline  use cmdline as kernel command line\n"
+    "  -initrd ramdisk  use ramdisk for the vmlinux kernel\n"
 #if BX_DEBUGGER
     "  -rc filename     execute debugger commands stored in file\n"
     "  -dbglog filename specify Bochs internal debugger log file name\n"
@@ -741,6 +744,25 @@ int bx_init_main(int argc, char *argv[])
         SIM->get_param_enum(BXPN_BOCHS_START)->set(BX_QUICK_START);
         SIM->get_param_bool(BXPN_RESTORE_FLAG)->set(1);
         SIM->get_param_string(BXPN_RESTORE_PATH)->set(argv[arg]);
+      }
+    }
+    else if (!strcmp("-kernel", argv[arg])) {
+      if (++arg >= argc) BX_PANIC(("-kernel must be followed by a path"));
+      else {
+        SIM->get_param_enum(BXPN_BOCHS_START)->set(BX_QUICK_START);
+        SIM->get_param_string(BXPN_KERNEL_PATH)->set(argv[arg]);
+      }
+    }
+    else if (!strcmp("-append", argv[arg])) {
+      if (++arg >= argc) BX_PANIC(("-append must be followed by a string"));
+      else {
+        SIM->get_param_string(BXPN_KERNEL_CMDLINE)->set(argv[arg]);
+      }
+    }
+    else if (!strcmp("-initrd", argv[arg])) {
+      if (++arg >= argc) BX_PANIC(("-initrd must be followed by a path"));
+      else {
+        SIM->get_param_string(BXPN_KERNEL_INITRD)->set(argv[arg]);
       }
     }
 #ifdef WIN32

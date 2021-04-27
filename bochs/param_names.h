@@ -1,5 +1,5 @@
 /////////////////////////////////////////////////////////////////////////
-// $Id$
+// $Id: param_names.h 14017 2020-12-04 17:04:40Z vruppert $
 /////////////////////////////////////////////////////////////////////////
 //
 //  Copyright (C) 2009-2020  The Bochs Project
@@ -35,6 +35,9 @@
 #define BXPN_DEBUG_RUNNING               "general.debug_running"
 #define BXPN_PLUGIN_CTRL                 "general.plugin_ctrl"
 #define BXPN_UNLOCK_IMAGES               "general.unlock_images"
+#define BXPN_KERNEL_PATH                 "general.kernel_path"
+#define BXPN_KERNEL_CMDLINE              "general.kernel_cmdline"
+#define BXPN_KERNEL_INITRD               "general.kernel_initrd"
 #define BXPN_CPU_NPROCESSORS             "cpu.n_processors"
 #define BXPN_CPU_NCORES                  "cpu.n_cores"
 #define BXPN_CPU_NTHREADS                "cpu.n_threads"

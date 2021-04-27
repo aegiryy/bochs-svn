@@ -1,5 +1,5 @@
 /////////////////////////////////////////////////////////////////////////
-// $Id$
+// $Id: misc_mem.cc 14141 2021-02-11 15:05:06Z sshwarts $
 /////////////////////////////////////////////////////////////////////////
 //
 //  Copyright (C) 2001-2020  The Bochs Project
@@ -96,7 +96,7 @@ void BX_MEM_C::init_memory(Bit64u guest, Bit64u host)
 {
   unsigned i, idx;
 
-  BX_DEBUG(("Init $Id$"));
+  BX_DEBUG(("Init $Id: misc_mem.cc 14141 2021-02-11 15:05:06Z sshwarts $"));
 
   // accept only memory size which is multiply of 1M
   BX_ASSERT((host & 0xfffff) == 0);
@@ -573,6 +573,274 @@ void BX_MEM_C::load_RAM(const char *path, bx_phy_address ramaddress)
                         (unsigned) ramaddress,
                         (unsigned) stat_buf.st_size,
                          path));
+}
+
+struct efi_info
+{
+  Bit32u efi_loader_signature;
+  Bit32u efi_systab;
+  Bit32u efi_memdesc_size;
+  Bit32u efi_memdesc_version;
+  Bit32u efi_memmap;
+  Bit32u efi_memmap_size;
+  Bit32u efi_systab_hi;
+  Bit32u efi_memmap_hi;
+} __attribute__((packed));
+
+struct setup_header
+{
+  Bit8u    setup_sects;
+  Bit16u   root_flags;
+  Bit32u   syssize;
+  Bit16u   ram_size;
+  Bit16u   vid_mode;
+  Bit16u   root_dev;
+  Bit16u   boot_flag;
+  Bit16u   jump;
+  Bit32u   header;
+  Bit16u   version;
+  Bit32u   realmode_swtch;
+  Bit16u   start_sys_seg;
+  Bit16u   kernel_version;
+  Bit8u    type_of_loader;
+  Bit8u    loadflags;
+  Bit16u   setup_move_size;
+  Bit32u   code32_start;
+  Bit32u   ramdisk_image;
+  Bit32u   ramdisk_size;
+  Bit32u   bootsect_kludge;
+  Bit16u   heap_end_ptr;
+  Bit8u    ext_loader_ver;
+  Bit8u    ext_loader_type;
+  Bit32u   cmd_line_ptr;
+  Bit32u   initrd_addr_max;
+  Bit32u   kernel_alignment;
+  Bit8u    relocatable_kernel;
+  Bit8u    min_alignment;
+  Bit16u   xloadflags;
+  Bit32u   cmdline_size;
+  Bit32u   hardware_subarch;
+  Bit64u   hardware_subarch_data;
+  Bit32u   payload_offset;
+  Bit32u   payload_length;
+  Bit64u   setup_data;
+  Bit64u   pref_address;
+  Bit32u   init_size;
+  Bit32u   handover_offset;
+} __attribute__((packed));
+
+struct boot_e820_entry
+{
+  Bit64u addr;
+  Bit64u size;
+  Bit32u type;
+} __attribute__((packed));
+
+struct boot_params
+{
+  // would be struct screen_info
+  Bit8u screen_info[0x40];
+
+  // would be struct apm_bios_info
+  Bit8u apm_bios_info[0x14];
+  Bit8u _pad2[4];
+
+  Bit64u tboot_addr;
+
+  // would be struct ist_info
+  Bit8u ist_info[0x10];
+  Bit8u _pad3[16];
+
+  Bit8u hd0_info[16];
+  Bit8u hd1_info[16];
+
+  // would be struct sys_desc_table
+  Bit8u sys_desc_table[0x10];
+
+  // would be struct olpc_ofw_header
+  Bit8u olpc_ofw_header[0x10];
+
+  Bit32u ext_ramdisk_image;
+  Bit32u ext_ramdisk_size;
+  Bit32u ext_cmd_line_ptr;
+  Bit8u  _pad4[116];
+
+  // would be struct edid_info
+  Bit8u edid_info[0x80];
+
+  struct efi_info efi_info;
+
+  Bit32u alt_mem_k;
+  Bit32u scratch;
+  Bit8u e820_entries;
+  Bit8u eddbuf_entries;
+  Bit8u edd_mbr_sig_buf_entries;
+  Bit8u kbd_status;
+  Bit8u secure_boot;
+  Bit8u _pad5[2];
+
+  Bit8u sentinel;
+  Bit8u _pad6[1];
+  struct setup_header hdr;
+  Bit8u _pad7[0x290-0x1f1-sizeof(setup_header)];
+  Bit32u edd_mbr_sig_buffer[16];
+  struct boot_e820_entry e820_table[128];
+  Bit8u _pad8[48];
+
+  // struct edd_info eddbuf[EDDMAXNR];
+  Bit8u eddbuf[0x1ec];
+  Bit8u _pad9[276];
+} __attribute__((packed));
+
+void BX_MEM_C::load_kernel(const char *path, const char *ramdisk, const char *cmdline)
+{
+  struct stat stat_buf;
+  int fd, ret;
+  unsigned long size, offset;
+  struct setup_header header;
+  struct boot_params *params;
+  unsigned long remaining;
+  unsigned long cmdline_addr, params_addr;
+  struct boot_e820_entry *entry = (struct boot_e820_entry *)BX_MEM_THIS get_vector(0x7c00);
+
+  // read in the kernel image
+  fd = open(path, O_RDONLY
+#ifdef O_BINARY
+                | O_BINARY
+#endif
+           );
+  if (fd < 0) {
+    BX_PANIC(("RAM: Couldn't open the kernel image file '%s'.", path));
+  }
+
+  if (lseek(fd, 0x1f1, SEEK_SET) != 0x1f1)
+    BX_PANIC(("RAM: Invalid kernel image '%s'.", path));
+
+  if (read(fd, &header, sizeof(header)) != sizeof(header))
+    BX_PANIC(("RAM: Invalid kernel image '%s'.", path));
+
+  if (header.header != 'SrdH' ||
+      header.pref_address % 0x1000 != 0 ||
+      header.init_size % 0x1000 != 0) {
+    BX_PANIC(("RAM: Invalid kernel image file '%s'.", path));
+  }
+
+  offset = (header.setup_sects + 1) * 512;
+
+  if (lseek(fd, offset, SEEK_SET) != offset)
+    BX_PANIC(("RAM: Invalid kernel image '%s'.", path));
+
+  for (offset = 0; offset < header.init_size; offset += 0x1000) {
+    if (read(fd, BX_MEM_THIS get_vector(header.pref_address + offset), 0x1000) != 0x1000)
+      break;
+  }
+
+  close(fd);
+
+  BX_INFO(("RAM: Load kernel image '%s' at %lx.", path, header.pref_address));
+  BX_CPU(0)->gen_reg[BX_64BIT_REG_RIP].rrx = header.pref_address;
+
+  BX_CPU(0)->sregs[BX_SEG_REG_CS].selector.value = 8;
+  BX_CPU(0)->sregs[BX_SEG_REG_CS].cache.valid = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_CS].cache.p = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_CS].cache.dpl = 0;
+  BX_CPU(0)->sregs[BX_SEG_REG_CS].cache.segment = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_CS].cache.type = 0xb;
+  BX_CPU(0)->sregs[BX_SEG_REG_CS].cache.u.segment.base = 0;
+  BX_CPU(0)->sregs[BX_SEG_REG_CS].cache.u.segment.limit_scaled = 0xffffffff;
+  BX_CPU(0)->sregs[BX_SEG_REG_CS].cache.u.segment.g = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_CS].cache.u.segment.d_b = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_CS].cache.u.segment.l = 0;
+
+  BX_CPU(0)->sregs[BX_SEG_REG_DS].selector.value = 16;
+  BX_CPU(0)->sregs[BX_SEG_REG_DS].cache.valid = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_DS].cache.p = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_DS].cache.dpl = 0;
+  BX_CPU(0)->sregs[BX_SEG_REG_DS].cache.segment = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_DS].cache.type = 0x3;
+  BX_CPU(0)->sregs[BX_SEG_REG_DS].cache.u.segment.base = 0;
+  BX_CPU(0)->sregs[BX_SEG_REG_DS].cache.u.segment.limit_scaled = 0xffffffff;
+  BX_CPU(0)->sregs[BX_SEG_REG_DS].cache.u.segment.g = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_DS].cache.u.segment.d_b = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_DS].cache.u.segment.l = 0;
+
+  BX_CPU(0)->sregs[BX_SEG_REG_SS].selector.value = 16;
+  BX_CPU(0)->sregs[BX_SEG_REG_SS].cache.valid = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_SS].cache.p = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_SS].cache.dpl = 0;
+  BX_CPU(0)->sregs[BX_SEG_REG_SS].cache.segment = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_SS].cache.type = 0x3;
+  BX_CPU(0)->sregs[BX_SEG_REG_SS].cache.u.segment.base = 0;
+  BX_CPU(0)->sregs[BX_SEG_REG_SS].cache.u.segment.limit_scaled = 0xffffffff;
+  BX_CPU(0)->sregs[BX_SEG_REG_SS].cache.u.segment.g = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_SS].cache.u.segment.d_b = 1;
+  BX_CPU(0)->sregs[BX_SEG_REG_SS].cache.u.segment.l = 0;
+
+  params_addr = header.init_size + header.pref_address;
+  cmdline_addr = params_addr + 0x1000;
+
+  BX_CPU(0)->gen_reg[BX_64BIT_REG_RSI].rrx = params_addr;
+  params = (struct boot_params *)BX_MEM_THIS get_vector(params_addr);
+  params->hdr = header;
+  params->hdr.code32_start = header.pref_address;
+  params->hdr.type_of_loader = 0xff;
+  params->hdr.cmd_line_ptr = cmdline_addr;
+  params->hdr.cmdline_size = strlen(cmdline);
+  strcpy((char *)BX_MEM_THIS get_vector(params->hdr.cmd_line_ptr), cmdline);
+
+  if (ramdisk && strlen(ramdisk)) {
+    unsigned long ramdisk_size;
+    unsigned long ramdisk_addr = cmdline_addr + 0x1000;
+    fd = open(ramdisk, O_RDONLY
+  #ifdef O_BINARY
+              | O_BINARY
+  #endif
+            );
+    if (fd < 0) {
+      BX_PANIC(("RAM: couldn't open ramdisk file '%s'.", ramdisk));
+      return;
+    }
+    ret = fstat(fd, &stat_buf);
+    if (ret) {
+      close(fd);
+      BX_PANIC(("RAM: couldn't stat ramdisk file '%s'.", ramdisk));
+      return;
+    }
+
+    ramdisk_size = (unsigned long)stat_buf.st_size;
+    params->hdr.ramdisk_image = ramdisk_addr;
+    params->hdr.ramdisk_size = ramdisk_size;
+
+    BX_INFO(("RAM: ramdisk size %lx", ramdisk_size));
+
+    for (offset = 0, remaining = ramdisk_size; remaining > 0;) {
+      size = remaining < 0x1000 ? remaining : 0x1000;
+      ret = read(fd, (bx_ptr_t) BX_MEM_THIS get_vector(params->hdr.ramdisk_image + offset), size);
+      if (ret < size) {
+        BX_PANIC(("RAM: corrupted Linux ELF file '%s'.", path));
+        return;
+      }
+      offset += size;
+      remaining -= size;
+    }
+
+    close(fd);
+  }
+
+  while (entry->type) {
+    params->e820_table[params->e820_entries++] = *entry;
+    entry++;
+  }
+
+  BX_CPU(0)->cr4.set_PAE(1);
+  BX_CPU(0)->cr4.set_PSE(1);
+  BX_CPU(0)->cr0.set_PE(1);
+  BX_CPU(0)->efer.set_SCE(1);
+  BX_CPU(0)->efer.set_NXE(1);
+  BX_CPU(0)->cpu_mode = BX_MODE_IA32_PROTECTED;
+
+  BX_CPU(0)->async_event = 1;
+  BX_CPU(0)->after_restore_state();
 }
 
 bool BX_MEM_C::dbg_fetch_mem(BX_CPU_C *cpu, bx_phy_address addr, unsigned len, Bit8u *buf)

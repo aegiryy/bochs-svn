@@ -83,6 +83,7 @@ void bx_biosdev_c::init(void)
   DEV_register_iowrite_handler(this, write_handler, 0x0401, "Bios Panic Port 2", 3);
   DEV_register_iowrite_handler(this, write_handler, 0x0402, "Bios Info Port", 1);
   DEV_register_iowrite_handler(this, write_handler, 0x0403, "Bios Debug Port", 1);
+  DEV_register_iowrite_handler(this, write_handler, 0x0404, "Linux Direct Port", 1);
 
   DEV_register_iowrite_handler(this, write_handler, 0x0500, "VGABios Info Port", 1);
   DEV_register_iowrite_handler(this, write_handler, 0x0501, "VGABios Panic Port 1", 3);
@@ -156,6 +157,14 @@ void bx_biosdev_c::write(Bit32u address, Bit32u value, unsigned io_len)
         else
           bioslog->info("%s", BX_BIOS_THIS s.bios_message);
         BX_BIOS_THIS s.bios_panic_flag = 0;
+      }
+      break;
+
+    case 0x0404:
+      if (strlen(SIM->get_param_string(BXPN_KERNEL_PATH)->getptr())) {
+        BX_MEM(0)->load_kernel(SIM->get_param_string(BXPN_KERNEL_PATH)->getptr(),
+                               SIM->get_param_string(BXPN_KERNEL_INITRD)->getptr(),
+                               SIM->get_param_string(BXPN_KERNEL_CMDLINE)->getptr());
       }
       break;
 

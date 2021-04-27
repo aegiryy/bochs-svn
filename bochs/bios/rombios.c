@@ -8276,6 +8276,32 @@ int17_function(regs, ds, iret_addr)
 }
 
 void
+check_linux_direct()
+{
+ASM_START
+  pushad
+  mov di, #0x7C00
+  mov bx, #0
+  mov edx, #0x534D4150
+  push #0
+  push #0
+  push #0
+cont:
+  mov ax, #0xE820
+  pushad
+  call _int15_function32
+  popad
+  add di, #0x14
+  cmp bx, #0
+  jne cont
+  add sp, #6
+  popad
+ASM_END
+
+  outb(0x404, 0);
+}
+
+void
 int19_function(seq_nr)
 Bit16u seq_nr;
 {
@@ -8294,6 +8320,8 @@ Bit16u seq_nr;
   Bit16u bootfirst;
 
   ipl_entry_t e;
+
+  check_linux_direct();
 
   // if BX_ELTORITO_BOOT is not defined, old behavior
   //   check bit 5 in CMOS reg 0x2d.  load either 0x00 or 0x80 into DL

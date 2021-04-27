@@ -1,5 +1,5 @@
 /////////////////////////////////////////////////////////////////////////
-// $Id$
+// $Id: config.cc 14229 2021-04-18 17:20:41Z vruppert $
 /////////////////////////////////////////////////////////////////////////
 //
 //  Copyright (C) 2002-2021  The Bochs Project
@@ -443,6 +443,24 @@ void bx_init_options()
     "restore_path",
     "Path to data for restore",
     "Path to data for restore",
+    "",
+    BX_PATHNAME_LEN);
+  new bx_param_string_c(menu,
+    "kernel_path",
+    "Path to kernel to boot",
+    "Path to kernel to boot",
+    "",
+    BX_PATHNAME_LEN);
+  new bx_param_string_c(menu,
+    "kernel_cmdline",
+    "Path to kernel cmdline",
+    "Path to kernel cmdline",
+    "",
+    BX_PATHNAME_LEN);
+  new bx_param_string_c(menu,
+    "kernel_initrd",
+    "Path to kernel ramdisk",
+    "Path to kernel ramdisk",
     "",
     BX_PATHNAME_LEN);
 

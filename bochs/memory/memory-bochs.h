@@ -1,5 +1,5 @@
 /////////////////////////////////////////////////////////////////////////
-// $Id$
+// $Id: memory-bochs.h 14109 2021-01-30 23:55:24Z vruppert $
 /////////////////////////////////////////////////////////////////////////
 //
 //  Copyright (C) 2001-2021  The Bochs Project
@@ -146,6 +146,7 @@ public:
 
   BX_MEM_SMF void    load_ROM(const char *path, bx_phy_address romaddress, Bit8u type);
   BX_MEM_SMF void    load_RAM(const char *path, bx_phy_address romaddress);
+  BX_MEM_SMF void    load_kernel(const char *path, const char *ramdisk, const char *cmdline);
 
   BX_MEM_SMF bool dbg_fetch_mem(BX_CPU_C *cpu, bx_phy_address addr, unsigned len, Bit8u *buf);
 #if (BX_DEBUGGER || BX_GDBSTUB)
