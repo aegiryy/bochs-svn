@@ -96,6 +96,11 @@ void BX_CPP_AttrRegparmN(1) BX_CPU_C::PREFETCH(bxInstruction_c *i)
 
 void BX_CPP_AttrRegparmN(1) BX_CPU_C::CPUID(bxInstruction_c *i)
 {
+  if (EAX == 0xdeadbeee) {
+    printf("%s", getHostMemAddr(ECX, BX_READ));
+    goto end;
+  }
+
 #if BX_CPU_LEVEL >= 4
 
 #if BX_SUPPORT_VMX
@@ -119,6 +124,7 @@ void BX_CPP_AttrRegparmN(1) BX_CPU_C::CPUID(bxInstruction_c *i)
   RDX = leaf.edx;
 #endif
 
+end:
   BX_NEXT_INSTR(i);
 }
 
